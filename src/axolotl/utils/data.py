@@ -122,7 +122,7 @@ def load_tokenized_prepared_datasets(
 
     if dataset:
         ...
-    elif any(prepared_ds_path.glob("*")):
+    elif cfg.dataset_prepared_path and any(prepared_ds_path.glob("*")):
         LOG.info(f"Loading prepared dataset from disk at {prepared_ds_path}...")
         dataset = load_from_disk(str(prepared_ds_path))
         LOG.info("Prepared dataset loaded from disk...")
@@ -247,6 +247,16 @@ def load_tokenized_prepared_datasets(
                 d_prompt_style = d_type_split[1] if len(d_type_split) > 1 else None
             if "train" in ds:
                 ds = ds["train"]
+            elif (
+                isinstance(ds, DatasetDict)
+                and d.train_on_split
+                and d.train_on_split in ds
+            ):
+                ds = ds[d.train_on_split]
+            elif isinstance(ds, DatasetDict):
+                raise ValueError(
+                    f"no train split found for dataset {d.path}, you may specify a split with 'train_on_split: `"
+                )
             if (
                 "input_ids" in ds.features
                 and "attention_mask" in ds.features
@@ -347,7 +357,7 @@ def load_tokenized_prepared_datasets(
         if len(datasets) > 1:
             LOG.info("shuffle merged datasets")
             dataset = dataset.shuffle(seed=seed)
-        if cfg.local_rank == 0:
+        if cfg.local_rank == 0 and cfg.dataset_prepared_path:
             LOG.info(f"Saving merged prepared dataset to disk... {prepared_ds_path}")
             dataset.save_to_disk(prepared_ds_path)
             if cfg.push_dataset_to_hub:
@@ -415,7 +425,7 @@ def load_prepare_datasets(
 
         if dataset:
             ...
-        elif any(prepared_ds_path.glob("*")):
+        elif cfg.dataset_prepared_path and any(prepared_ds_path.glob("*")):
             LOG.info(
                 f"Loading prepared packed dataset from disk at {prepared_ds_path}..."
             )

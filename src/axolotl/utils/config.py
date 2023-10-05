@@ -49,6 +49,8 @@ def normalize_config(cfg):
     cfg.batch_size = (
         cfg.batch_size or cfg.micro_batch_size * cfg.gradient_accumulation_steps
     )
+    if cfg.eval_batch_size is None:
+        cfg.eval_batch_size = cfg.micro_batch_size
     cfg.world_size = int(os.environ.get("WORLD_SIZE", 1))
     cfg.local_rank = int(os.environ.get("LOCAL_RANK", 0))
     cfg.eval_table_size = cfg.eval_table_size or 0
@@ -74,6 +76,8 @@ def normalize_config(cfg):
         cfg.torch_dtype = torch.float16
     else:
         cfg.torch_dtype = torch.float32
+
+    cfg.dataset_processes = cfg.dataset_processes or os.cpu_count()
 
     model_config = load_model_config(cfg)
     cfg.model_config_type = model_config.model_type
@@ -155,6 +159,11 @@ def validate_config(cfg):
             "batch_size is not recommended. Please use gradient_accumulation_steps instead.",
             "To calculate the equivalent gradient_accumulation_steps, divide batch_size / micro_batch_size / number of gpus.",
         )
+    if cfg.eval_batch_size != cfg.micro_batch_size:
+        LOG.warning(
+            "eval_batch_size != micro_batch_size. This can lead to VRAM instability."
+        )
+
     if cfg.load_4bit:
         raise ValueError("cfg.load_4bit parameter has been deprecated")
 
@@ -293,6 +302,8 @@ def validate_config(cfg):
 
     if cfg.datasets:
         for idx, ds_cfg in enumerate(cfg.datasets):
+            if not ds_cfg.type:
+                continue
             if ds_cfg.type == "sharegpt:chat":
                 LOG.warning(
                     PendingDeprecationWarning(
